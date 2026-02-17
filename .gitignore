@@ -1,0 +1,17 @@
+# Build artifacts
+build/
+bin/
+
+# Object files
+*.o
+
+# Executables
+ccwc
+test
+
+# OS-specific files
+.DS_Store
+
+# Temporary files
+*.tmp
+*.bak
