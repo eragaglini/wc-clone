@@ -5,16 +5,24 @@
 #include <getopt.h>
 #include "counter.h"
 
+/**
+ * Funzione di utilità per stampare i risultati formattati.
+ */
+void print_results(long long lines, long long words, long long bytes, 
+                   int do_l, int do_w, int do_c, const char* name) {
+    if (do_l) printf("%8lld ", lines);
+    if (do_w) printf("%8lld ", words);
+    if (do_c) printf("%8lld ", bytes);
+    printf("%s\n", name);
+}
+
 int main(int argc, char* argv[]) {
     int opt;
     // Flag per le opzioni
     int do_bytes = 0, do_lines = 0, do_words = 0;
-    
-    // Se non vengono passate opzioni, il comportamento standard di wc 
-    // è mostrare tutto (-clw)
     int no_opts = 1;
 
-    // Parsing delle opzioni
+    // 1. Parsing delle opzioni con getopt
     while ((opt = getopt(argc, argv, "clw")) != -1) {
         no_opts = 0;
         switch (opt) {
@@ -22,50 +30,53 @@ int main(int argc, char* argv[]) {
             case 'l': do_lines = 1; break;
             case 'w': do_words = 1; break;
             default:
-                fprintf(stderr, "Uso: %s [-clw] [file]\n", argv[0]);
+                fprintf(stderr, "Uso: %s [-clw] [file1 file2 ...]\n", argv[0]);
                 return 1;
         }
     }
 
-    // Se l'utente non ha specificato flag, li attiviamo tutti
+    // Se non ci sono flag, l'impostazione predefinita è -clw
     if (no_opts) {
-        do_bytes = 1;
-        do_lines = 1;
-        do_words = 1;
+        do_bytes = do_lines = do_words = 1;
     }
 
-    // Il nome del file è il primo argomento dopo le opzioni
-    char* file_name = argv[optind];
-    FILE* fp;
+    // Variabili per i conteggi
+    long long l_count, w_count, b_count;
 
-    if (file_name == NULL) {
-        // Se non c'è un file, leggiamo dallo Standard Input (per pipe come: cat file | ccwc)
-        fp = stdin;
-        file_name = ""; // Non stampiamo il nome se leggiamo da stdin
-    } else {
-        fp = fopen(file_name, "r");
-        if (fp == NULL) {
-            perror("Errore apertura file");
-            return 1;
+    // 2. Gestione dell'Input
+    if (optind == argc) {
+        /* CASO A: Nessun file passato, leggiamo dallo Standard Input */
+        count_all(stdin, &l_count, &w_count, &b_count);
+        print_results(l_count, w_count, b_count, do_lines, do_words, do_bytes, "");
+    } 
+    else {
+        /* CASO B: Uno o più file passati come argomenti */
+        long long total_l = 0, total_w = 0, total_b = 0;
+        int files_processed = 0;
+
+        for (int i = optind; i < argc; i++) {
+            FILE* fp = fopen(argv[i], "r");
+            if (fp == NULL) {
+                perror(argv[i]); // Stampa l'errore specifico (es. Permission denied)
+                continue;        // Salta al file successivo
+            }
+
+            count_all(fp, &l_count, &w_count, &b_count);
+            print_results(l_count, w_count, b_count, do_lines, do_words, do_bytes, argv[i]);
+
+            // Accumulo per il totale finale
+            total_l += l_count;
+            total_w += w_count;
+            total_b += b_count;
+            files_processed++;
+
+            fclose(fp);
         }
-    }
 
-    // Variabili per i risultati
-    long long lines_count, words_count, bytes_count;
-
-    // Eseguiamo la scansione unica
-    count_all(fp, &lines_count, &words_count, &bytes_count);
-
-    // Stampa dei risultati in base ai flag attivati
-    // L'ordine standard di wc è: linee, parole, byte
-    if (do_lines) printf("%8lld ", lines_count);
-    if (do_words) printf("%8lld ", words_count);
-    if (do_bytes) printf("%8lld ", bytes_count);
-    
-    printf("%s\n", file_name);
-
-    if (fp != stdin) {
-        fclose(fp);
+        // Se abbiamo processato più di un file, stampiamo la riga "total"
+        if (files_processed > 1) {
+            print_results(total_l, total_w, total_b, do_lines, do_words, do_bytes, "total");
+        }
     }
 
     return 0;
